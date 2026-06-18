@@ -1,0 +1,12 @@
+streamlit
+matplotlib
+mplsoccer
+pandas
+numpy
+Pillow
+python-docx
+plotly
+mplcursors
+reportlab
+openpyxl
+html2image
