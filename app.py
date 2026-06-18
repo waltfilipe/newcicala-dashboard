@@ -775,7 +775,7 @@ def compute_defensive_stats(df: pd.DataFrame, match_name: str) -> dict:
 # ── UI HELPERS ─────────────────────────────────────────────────
 # Card text sizes (labels/text only — numbers stay large)
 CARD_TITLE_TEXT = "14px"
-CARD_LABEL_TEXT = "14px"
+CARD_LABEL_TEXT = "16px"
 CARD_SUBTEXT = "13px"
 CARD_CAPTION = "12px"
 CARD_BADGE_TEXT = "12px"
@@ -857,7 +857,12 @@ def _rand_target(base: float, key: str, is_pct: bool = False, decimals: int = 1)
     return round(target, decimals)
 
 BENCHMARK_POSITIONS = ("RDMF", "RCMF", "LDMF", "LCMF", "DMF")
-BENCHMARK_FILES = {"MLS": "MLS 1.xlsx", "TOP 5 - UE": "TOP 5 - UE.xlsx"}
+BENCHMARK_EUR_KEY = "TOP 5 - EUR"
+BENCHMARK_FILES = {"MLS": "MLS 1.xlsx", BENCHMARK_EUR_KEY: "TOP 5 - UE.xlsx"}
+SGA_RANGE_METRICS = {
+    "xt_p90": "0.8 – 2.0",
+    "funnel_actions_p90": "2.0 – 5.0",
+}
 BENCHMARK_MINUTES_RATIO = 0.50
 
 @st.cache_data(show_spinner=False)
@@ -944,45 +949,68 @@ def _fmt_target_value(key: str, targets: dict) -> str:
 
 
 def build_metric_item(label: str, val: float, disp_val: str, key: str, extra: str = ""):
-    """Item tuple: label, val, disp_val, disp_mls, disp_top_ue, extra."""
+    """Item tuple: label, val, disp_val, ref_type, ref_a, ref_b, extra."""
+    if key in SGA_RANGE_METRICS:
+        return (label, float(val), disp_val, "sga", SGA_RANGE_METRICS[key], "", extra)
     return (
         label,
         float(val),
         disp_val,
+        "league",
         _fmt_target_value(key, T_MLS),
-        _fmt_target_value(key, T_TOP_UE),
+        _fmt_target_value(key, T_TOP_EUR),
         extra,
     )
 
 
-def _targets_line_html(disp_mls: str, disp_top_ue: str, layout: str = "inline") -> str:
+def _sga_range_html(range_str: str) -> str:
+    return (
+        f'<div style="font-size:{CARD_CAPTION};color:{CARD_MUTED_TEXT};margin-top:6px">'
+        f'Range SGA: {range_str}'
+        f'</div>'
+    )
+
+
+def _targets_line_html(disp_mls: str, disp_top_eur: str, layout: str = "inline") -> str:
     if layout == "stacked":
         return (
             f'<div style="font-size:{CARD_CAPTION};color:{CARD_MUTED_TEXT};margin-top:6px;line-height:1.45">'
             f'<div>MLS: {disp_mls}</div>'
-            f'<div>TOP 5 UE: {disp_top_ue}</div>'
+            f'<div>TOP 5 EUR: {disp_top_eur}</div>'
             f'</div>'
         )
     if layout == "columns":
         return (
             f'<div style="display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-top:6px">'
             f'<span style="font-size:{CARD_CAPTION};color:{CARD_MUTED_TEXT}">MLS: {disp_mls}</span>'
-            f'<span style="font-size:{CARD_CAPTION};color:{CARD_MUTED_TEXT};text-align:right">TOP 5 UE: {disp_top_ue}</span>'
+            f'<span style="font-size:{CARD_CAPTION};color:{CARD_MUTED_TEXT};text-align:right">TOP 5 EUR: {disp_top_eur}</span>'
             f'</div>'
         )
     return (
         f'<div style="font-size:{CARD_CAPTION};color:{CARD_MUTED_TEXT};margin-top:6px">'
-        f'MLS: {disp_mls} · TOP 5 UE: {disp_top_ue}'
+        f'MLS: {disp_mls} · TOP 5 EUR: {disp_top_eur}'
         f'</div>'
     )
+
+
+def _item_reference_line(item, layout: str = "inline") -> str:
+    ref_type = item[3]
+    if ref_type == "sga":
+        return _sga_range_html(item[4])
+    return _targets_line_html(item[4], item[5], layout=layout)
+
+
+def _item_reference_text(item) -> str:
+    if item[3] == "sga":
+        return f"Range SGA: {item[4]}"
+    return f"MLS: {item[4]} · TOP 5 EUR: {item[5]}"
 
 
 def _combined_body_scoreboard(border_color, items, targets_layout="inline", tile=False):
     body = ""
     for idx, item in enumerate(items):
         label, disp_val = item[0], item[2]
-        disp_mls, disp_top_ue = item[3], item[4]
-        extra = item[5] if len(item) > 5 and item[5] else ""
+        extra = item[6] if len(item) > 6 and item[6] else ""
         sep = _item_sep(idx, len(items))
         if tile:
             body += (
@@ -997,7 +1025,7 @@ def _combined_body_scoreboard(border_color, items, targets_layout="inline", tile
             f'<span style="font-size:26px;font-weight:800;color:#ffffff;white-space:nowrap">{disp_val}</span>'
             '</div>'
         )
-        body += _targets_line_html(disp_mls, disp_top_ue, layout=targets_layout)
+        body += _item_reference_line(item, layout=targets_layout)
         if extra:
             body += f'<div style="font-size:{CARD_CAPTION};color:#64748b;margin-top:4px;text-align:right">{extra}</div>'
         body += '</div>'
@@ -1008,10 +1036,9 @@ def _body_benchmarks_reference(items, targets_layout="inline"):
     body = ""
     for idx, item in enumerate(items):
         label = item[0]
-        disp_mls, disp_top_ue = item[3], item[4]
         body += f'<div style="{_item_sep(idx, len(items))}">'
         body += f'<span style="font-size:{CARD_LABEL_TEXT};font-weight:600;color:#eef1f7">{label}</span>'
-        body += _targets_line_html(disp_mls, disp_top_ue, layout=targets_layout)
+        body += _item_reference_line(item, layout=targets_layout)
         body += '</div>'
     return body
 
@@ -1085,7 +1112,7 @@ def _body_data_simple(items):
     body = ""
     for idx, item in enumerate(items):
         label, disp_val = item[0], item[2]
-        extra = item[5] if len(item) > 5 and item[5] else ""
+        extra = item[6] if len(item) > 6 and item[6] else ""
         body += f'<div style="{_item_sep(idx, len(items))}">'
         body += '<div style="display:flex;justify-content:space-between;align-items:center;gap:12px">'
         body += f'<span style="font-size:{CARD_LABEL_TEXT};font-weight:700;color:#eef1f7;flex:1;min-width:0">{label}</span>'
@@ -1268,10 +1295,10 @@ def _export_card_png_matplotlib(title, border_color, items, layout_mode, dpi=CAR
         for item in items:
             rows.append((item[0], str(item[2]), "", "#eef1f7"))
         for item in items:
-            rows.append((item[0], "", f"MLS: {item[3]} · TOP 5 UE: {item[4]}", CARD_MUTED_TEXT))
+            rows.append((item[0], "", _item_reference_text(item), CARD_MUTED_TEXT))
     else:
         for item in items:
-            rows.append((item[0], str(item[2]), f"MLS: {item[3]} · TOP 5 UE: {item[4]}", CARD_MUTED_TEXT))
+            rows.append((item[0], str(item[2]), _item_reference_text(item), CARD_MUTED_TEXT))
     fig_w = (CARD_EXPORT_WIDTH / CARD_EXPORT_DPI) * CARD_EXPORT_SCALE
     fig_h = (1.35 + len(rows) * 0.58) * CARD_EXPORT_SCALE
     fig, ax = plt.subplots(figsize=(fig_w, fig_h), dpi=CARD_EXPORT_DPI)
@@ -1615,8 +1642,14 @@ def _pdf_diff_badge_text(val, target):
     color, _ = _diff_gradient_color(diff_pct)
     return text, color
 
+def _pdf_reference_text(ref_type: str, ref_a: str, ref_b: str = "") -> str:
+    if ref_type == "sga":
+        return f"Range SGA: {ref_a}"
+    return f"MLS: {ref_a} · TOP 5 EUR: {ref_b}"
+
+
 def _pdf_dark_card(accent_hex, title, metrics, pstyles, card_width):
-    """metrics: list of (label, disp_val, disp_mls, disp_top_ue)"""
+    """metrics: list of (label, disp_val, ref_type, ref_a, ref_b='')"""
     label_w = card_width * 0.56
     val_w = card_width * 0.44
     rows = [[Paragraph(title.upper(), pstyles["card_title"]), ""]]
@@ -1632,13 +1665,14 @@ def _pdf_dark_card(accent_hex, title, metrics, pstyles, card_width):
         ("BACKGROUND", (0, 0), (-1, 0), rl_colors.HexColor(accent_hex)),
         ("SPAN", (0, 0), (-1, 0)),
     ]
-    for label, disp_val, disp_mls, disp_top_ue in metrics:
+    for label, disp_val, ref_type, ref_a, *rest in metrics:
+        ref_b = rest[0] if rest else ""
         row_idx += 1
         cell = [
             Paragraph(f'<b>{label}</b>', pstyles["metric_label"]),
             Paragraph(
                 f'<font color="{PDF_TEXT}"><b>{disp_val}</b></font><br/>'
-                f'<font color="{PDF_MUTED}">MLS: {disp_mls} · TOP 5 UE: {disp_top_ue}</font>',
+                f'<font color="{PDF_MUTED}">{_pdf_reference_text(ref_type, ref_a, ref_b)}</font>',
                 pstyles["metric_tgt"],
             ),
         ]
@@ -1729,7 +1763,7 @@ def generate_season_pdf(card_tones=None, benchmark_source="MLS"):
             if isinstance(def_all[0][k], (int, float)):
                 _db[k] = sum(s[k] for s in def_all) / len(def_all)
     T_pdf_mls = build_metric_targets(_pb, _db, "MLS")
-    T_pdf_top = build_metric_targets(_pb, _db, "TOP 5 - UE")
+    T_pdf_eur = build_metric_targets(_pb, _db, BENCHMARK_EUR_KEY)
 
     img_pm, fig_pm = draw_pass_map(df_pass); plt.close(fig_pm)
     img_ht, fig_ht = draw_corridor_heatmap(df_pass); plt.close(fig_ht)
@@ -1755,16 +1789,16 @@ def generate_season_pdf(card_tones=None, benchmark_source="MLS"):
     ]
     pass_cards = [
         _pdf_dark_card(tones[0], "Overview", [
-            ("Total Passes Per Game", f"{s_pass['total_p90']:.1f}", f"{T_pdf_mls['total_p90']:.1f}", f"{T_pdf_top['total_p90']:.1f}"),
-            ("% Accuracy", f"{s_pass['accuracy_pct']:.1f}%", f"{T_pdf_mls['accuracy_pct']:.1f}%", f"{T_pdf_top['accuracy_pct']:.1f}%"),
+            ("Total Passes Per Game", f"{s_pass['total_p90']:.1f}", "league", f"{T_pdf_mls['total_p90']:.1f}", f"{T_pdf_eur['total_p90']:.1f}"),
+            ("% Accuracy", f"{s_pass['accuracy_pct']:.1f}%", "league", f"{T_pdf_mls['accuracy_pct']:.1f}%", f"{T_pdf_eur['accuracy_pct']:.1f}%"),
         ], ps, col_w),
         _pdf_dark_card(tones[1], "Progressive", [
-            ("Progressive Passes Per Game", f"{s_pass['advanced_passes_p90']:.1f}", f"{T_pdf_mls['advanced_passes_p90']:.1f}", f"{T_pdf_top['advanced_passes_p90']:.1f}"),
-            ("% Progressive Accuracy", f"{s_pass['advanced_accuracy_pct']:.1f}%", f"{T_pdf_mls['advanced_accuracy_pct']:.1f}%", f"{T_pdf_top['advanced_accuracy_pct']:.1f}%"),
+            ("Progressive Passes Per Game", f"{s_pass['advanced_passes_p90']:.1f}", "league", f"{T_pdf_mls['advanced_passes_p90']:.1f}", f"{T_pdf_eur['advanced_passes_p90']:.1f}"),
+            ("% Progressive Accuracy", f"{s_pass['advanced_accuracy_pct']:.1f}%", "league", f"{T_pdf_mls['advanced_accuracy_pct']:.1f}%", f"{T_pdf_eur['advanced_accuracy_pct']:.1f}%"),
         ], ps, col_w),
         _pdf_dark_card(tones[2], "Impact", [
-            ("Pass Impact Value Per Game", f"{s_pass['xt_p90']:.1f}", f"{T_pdf_mls['xt_p90']:.1f}", f"{T_pdf_top['xt_p90']:.1f}"),
-            ("% Positive Impact", f"{s_pass['pos_pct']:.1f}%", f"{T_pdf_mls['pos_pct']:.1f}%", f"{T_pdf_top['pos_pct']:.1f}%"),
+            ("Pass Impact Value Per Game", f"{s_pass['xt_p90']:.1f}", "sga", SGA_RANGE_METRICS["xt_p90"]),
+            ("% Positive Impact", f"{s_pass['pos_pct']:.1f}%", "league", f"{T_pdf_mls['pos_pct']:.1f}%", f"{T_pdf_eur['pos_pct']:.1f}%"),
         ], ps, col_w),
     ]
 
@@ -1775,16 +1809,16 @@ def generate_season_pdf(card_tones=None, benchmark_source="MLS"):
     ]
     def_cards = [
         _pdf_dark_card(tones[0], "Overview", [
-            ("Defensive Actions Per Game", f"{d_def['total_actions_p90']:.1f}", f"{T_pdf_mls['total_actions_p90']:.1f}", f"{T_pdf_top['total_actions_p90']:.1f}"),
-            ("Actions in Own Half Per Game", f"{d_def['actions_own_p90']:.1f}", f"{T_pdf_mls['actions_own_p90']:.1f}", f"{T_pdf_top['actions_own_p90']:.1f}"),
+            ("Defensive Actions Per Game", f"{d_def['total_actions_p90']:.1f}", "league", f"{T_pdf_mls['total_actions_p90']:.1f}", f"{T_pdf_eur['total_actions_p90']:.1f}"),
+            ("Actions in Own Half Per Game", f"{d_def['actions_own_p90']:.1f}", "league", f"{T_pdf_mls['actions_own_p90']:.1f}", f"{T_pdf_eur['actions_own_p90']:.1f}"),
         ], ps, col_w),
         _pdf_dark_card(tones[1], "Duels", [
-            ("Defensive Duels Per Game", f"{d_def['duels_p90']:.1f}", f"{T_pdf_mls['duels_p90']:.1f}", f"{T_pdf_top['duels_p90']:.1f}"),
-            ("% Duels Won", f"{d_def['duels_won_pct']:.1f}%", f"{T_pdf_mls['duels_won_pct']:.1f}%", f"{T_pdf_top['duels_won_pct']:.1f}%"),
+            ("Defensive Duels Per Game", f"{d_def['duels_p90']:.1f}", "league", f"{T_pdf_mls['duels_p90']:.1f}", f"{T_pdf_eur['duels_p90']:.1f}"),
+            ("% Duels Won", f"{d_def['duels_won_pct']:.1f}%", "league", f"{T_pdf_mls['duels_won_pct']:.1f}%", f"{T_pdf_eur['duels_won_pct']:.1f}%"),
         ], ps, col_w),
         _pdf_dark_card(tones[2], "Funnel Protection", [
-            ("Funnel Protection Actions Per Game", f"{d_def['funnel_actions_p90']:.1f}", f"{T_pdf_mls['funnel_actions_p90']:.1f}", f"{T_pdf_top['funnel_actions_p90']:.1f}"),
-            ("% FPA Successful", f"{d_def['funnel_success_pct']:.1f}%", f"{T_pdf_mls['funnel_success_pct']:.1f}%", f"{T_pdf_top['funnel_success_pct']:.1f}%"),
+            ("Funnel Protection Actions Per Game", f"{d_def['funnel_actions_p90']:.1f}", "sga", SGA_RANGE_METRICS["funnel_actions_p90"]),
+            ("% FPA Successful", f"{d_def['funnel_success_pct']:.1f}%", "league", f"{T_pdf_mls['funnel_success_pct']:.1f}%", f"{T_pdf_eur['funnel_success_pct']:.1f}%"),
         ], ps, col_w),
     ]
 
@@ -1824,7 +1858,7 @@ CARD_STYLE = st.sidebar.radio(
     "Choose visual layout",
     options=list(TARGET_CARD_STYLES.keys()),
     index=0,
-    help="Informative scoreboard layouts. Value inline with label; MLS and TOP 5 UE benchmarks below.",
+    help="Informative scoreboard layouts. Value inline with label; MLS and TOP 5 EUR benchmarks below.",
 )
 CARD_LAYOUT = st.sidebar.radio(
     "Card separation",
@@ -1846,7 +1880,7 @@ ACTIVE_CARD_TONES = GRAY_TONES if CARD_TONE_SCHEME == "Gray" else PASS_TONES
 st.sidebar.markdown("#### Target Benchmark")
 TARGET_BENCHMARK = st.sidebar.radio(
     "Comparison pool",
-    options=["MLS", "TOP 5 - UE"],
+    options=["MLS", BENCHMARK_EUR_KEY],
     index=0,
     help=(
         "Targets for passes and defensive duels are the position-filtered averages "
@@ -1906,8 +1940,8 @@ if len(def_all_stats) > 0:
             _def_base[k] = sum(s[k] for s in def_all_stats) / len(def_all_stats)
 
 T_MLS = build_metric_targets(_pass_base, _def_base, "MLS")
-T_TOP_UE = build_metric_targets(_pass_base, _def_base, "TOP 5 - UE")
-METRIC_TARGETS = T_MLS if TARGET_BENCHMARK == "MLS" else T_TOP_UE
+T_TOP_EUR = build_metric_targets(_pass_base, _def_base, BENCHMARK_EUR_KEY)
+METRIC_TARGETS = T_MLS if TARGET_BENCHMARK == "MLS" else T_TOP_EUR
 T = METRIC_TARGETS
 
 with st.sidebar.expander("Season targets (reference)"):
@@ -1918,11 +1952,18 @@ with st.sidebar.expander("Season targets (reference)"):
     }
     for _k, _v in T_MLS.items():
         _base = _pass_base.get(_k, _def_base.get(_k, 0))
+        if _k in SGA_RANGE_METRICS:
+            _ref = f"Range SGA: {SGA_RANGE_METRICS[_k]}"
+            _mls_ref = _ref
+            _eur_ref = _ref
+        else:
+            _mls_ref = T_MLS[_k]
+            _eur_ref = T_TOP_EUR[_k]
         _tgt_rows.append({
             "Metric": _k,
             "Hudson Per Game": round(_base, 2),
-            "MLS": T_MLS[_k],
-            "TOP 5 UE": T_TOP_UE[_k],
+            "MLS": _mls_ref,
+            "TOP 5 EUR": _eur_ref,
         })
     st.dataframe(pd.DataFrame(_tgt_rows), hide_index=True, use_container_width=True)
 
