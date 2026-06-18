@@ -860,9 +860,12 @@ BENCHMARK_POSITIONS = ("RDMF", "RCMF", "LDMF", "LCMF", "DMF")
 BENCHMARK_EUR_KEY = "TOP 5 - EUR"
 BENCHMARK_FILES = {"MLS": "MLS 1.xlsx", BENCHMARK_EUR_KEY: "TOP 5 - UE.xlsx"}
 SGA_RANGE_METRICS = {
-    "xt_p90": "0.8 – 2.0",
-    "funnel_actions_p90": "2.0 – 5.0",
+    "xt_p90": "1.7 – 2.0",
+    "pos_pct": "40% – 45%",
+    "funnel_actions_p90": "2.5 – 3.0",
+    "funnel_success_pct": "65% – 70%",
 }
+SGA_RANGE_LABEL = "SGA Range"
 BENCHMARK_MINUTES_RATIO = 0.50
 
 @st.cache_data(show_spinner=False)
@@ -966,7 +969,7 @@ def build_metric_item(label: str, val: float, disp_val: str, key: str, extra: st
 def _sga_range_html(range_str: str) -> str:
     return (
         f'<div style="font-size:{CARD_CAPTION};color:{CARD_MUTED_TEXT};margin-top:6px">'
-        f'Range SGA: {range_str}'
+        f'{SGA_RANGE_LABEL}: {range_str}'
         f'</div>'
     )
 
@@ -1002,7 +1005,7 @@ def _item_reference_line(item, layout: str = "inline") -> str:
 
 def _item_reference_text(item) -> str:
     if item[3] == "sga":
-        return f"Range SGA: {item[4]}"
+        return f"{SGA_RANGE_LABEL}: {item[4]}"
     return f"MLS: {item[4]} · TOP 5 EUR: {item[5]}"
 
 
@@ -1644,7 +1647,7 @@ def _pdf_diff_badge_text(val, target):
 
 def _pdf_reference_text(ref_type: str, ref_a: str, ref_b: str = "") -> str:
     if ref_type == "sga":
-        return f"Range SGA: {ref_a}"
+        return f"{SGA_RANGE_LABEL}: {ref_a}"
     return f"MLS: {ref_a} · TOP 5 EUR: {ref_b}"
 
 
@@ -1798,7 +1801,7 @@ def generate_season_pdf(card_tones=None, benchmark_source="MLS"):
         ], ps, col_w),
         _pdf_dark_card(tones[2], "Impact", [
             ("Pass Impact Value Per Game", f"{s_pass['xt_p90']:.1f}", "sga", SGA_RANGE_METRICS["xt_p90"]),
-            ("% Positive Impact", f"{s_pass['pos_pct']:.1f}%", "league", f"{T_pdf_mls['pos_pct']:.1f}%", f"{T_pdf_eur['pos_pct']:.1f}%"),
+            ("% Positive Impact", f"{s_pass['pos_pct']:.1f}%", "sga", SGA_RANGE_METRICS["pos_pct"]),
         ], ps, col_w),
     ]
 
@@ -1818,7 +1821,7 @@ def generate_season_pdf(card_tones=None, benchmark_source="MLS"):
         ], ps, col_w),
         _pdf_dark_card(tones[2], "Funnel Protection", [
             ("Funnel Protection Actions Per Game", f"{d_def['funnel_actions_p90']:.1f}", "sga", SGA_RANGE_METRICS["funnel_actions_p90"]),
-            ("% FPA Successful", f"{d_def['funnel_success_pct']:.1f}%", "league", f"{T_pdf_mls['funnel_success_pct']:.1f}%", f"{T_pdf_eur['funnel_success_pct']:.1f}%"),
+            ("% FPA Successful", f"{d_def['funnel_success_pct']:.1f}%", "sga", SGA_RANGE_METRICS["funnel_success_pct"]),
         ], ps, col_w),
     ]
 
@@ -1953,7 +1956,7 @@ with st.sidebar.expander("Season targets (reference)"):
     for _k, _v in T_MLS.items():
         _base = _pass_base.get(_k, _def_base.get(_k, 0))
         if _k in SGA_RANGE_METRICS:
-            _ref = f"Range SGA: {SGA_RANGE_METRICS[_k]}"
+            _ref = f"{SGA_RANGE_LABEL}: {SGA_RANGE_METRICS[_k]}"
             _mls_ref = _ref
             _eur_ref = _ref
         else:
